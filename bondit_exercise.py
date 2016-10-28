@@ -1,6 +1,6 @@
 import csv
-import json
-from decimal import Decimal
+import simplejson
+from decimal import *
 from sys import exit
 
 
@@ -20,13 +20,11 @@ class Bond(object):
 
 
 class BondManager(object):
-    @classmethod
-    def __init__(cls, filename):
-        cls.bond_list = []
-        cls.parse_scv(filename)
+    def __init__(self, filename):
+        self.bond_list = []
+        self.populate_bondmanager(filename)
 
-    @classmethod
-    def parse_scv(self, filename):
+    def populate_bondmanager(self, filename):
         with open(filename, 'rb') as csvfile:
             reader = csv.DictReader(csvfile, delimiter=';')
             for row in reader:
@@ -37,7 +35,6 @@ class BondManager(object):
                                 )
                 self.bond_list.append(new_bond)
 
-    @classmethod
     def get_bond(self, search_id):
         for bond in self.bond_list:
             if bond.bond_id == search_id:
@@ -46,66 +43,59 @@ class BondManager(object):
 
 
 class Asset(object):
-    def __init__(self, bondit_id, units):
+    def __init__(self, bondit_id, units, portfolio):
         self.bondit_id = int(bondit_id)
         self.units = int(units)
+        self.portfolio = portfolio
 
     @property
     def weight(self):
-        bond = BondManager.get_bond(search_id=self.bondit_id)
-        return (bond.price_dirty * self.units / Portfolio.holding_value)
+        bond = self.portfolio.bond_manager.get_bond(search_id=self.bondit_id)
+        return (bond.price_dirty * self.units / portfolio.holding_value)
 
 
 class Portfolio(object):
-    @classmethod
-    def __init__(cls, filename):
-        cls.assets = []
-        cls.assets = cls.parse_input(filename)
-        cls.holding_value = cls.get_holding_value()
+    def __init__(self, filename, bond_manager):
+        self.assets = []
+        self.bond_manager = bond_manager
+        self.assets = self.populate_portfolio(filename)
+        self.holding_value = self.get_holding_value()
 
-    @classmethod
-    def parse_input(cls, filename):
+    def populate_portfolio(self, filename):
         assets = []
         with open(filename) as json_file:
-            data = json.load(json_file)
+            data = simplejson.load(json_file)
             for asset in data['assets']:
-                new_asset = Asset(asset['bondit_id'], asset['units'])
+                new_asset = Asset(asset['bondit_id'], asset['units'], self)
                 assets.append(new_asset)
         return assets
 
-    @classmethod
-    def get_holding_value(cls):
+    def get_holding_value(self):
         holding_value = 0
-        for asset in cls.assets:
-            bond = bond_manager.get_bond(asset.bondit_id)
+        for asset in self.assets:
+            bond = self.bond_manager.get_bond(asset.bondit_id)
             holding_value += asset.units * bond.price_dirty
         return holding_value
 
-    @classmethod
-    def get_duration(cls):
-        duration = Decimal(0.00)
-        for asset in cls.assets:
-            bond = bond_manager.get_bond(asset.bondit_id)
-            duration += asset.weight * bond.duration
-        return duration
+    def get_portfolio_info(self):
+        duration = 0
+        total_return = 0
 
-    @classmethod
-    def get_total_return(cls):
-        total_return = Decimal(0.00)
-        for asset in cls.assets:
-            bond = bond_manager.get_bond(asset.bondit_id)
+        for asset in self.assets:
+            bond = self.bond_manager.get_bond(asset.bondit_id)
+            duration += asset.weight * bond.duration
             total_return += asset.weight * bond.profit
-        return total_return
+
+        return {"holding_value": self.holding_value,
+                "duration": duration,
+                "total_return": total_return,
+                }
 
 
 if __name__ == "__main__":
+    getcontext().prec = 4
     bond_manager = BondManager('bonds_trading_data.csv')
-    portfolio = Portfolio('input.json')
+    portfolio = Portfolio('input.json', bond_manager)
 
-    output = {
-        "portfolio_holding_value": str(portfolio.holding_value),
-        "portfolio_duration": str(portfolio.get_duration()),
-        "portfolio_total_return": str(portfolio.get_total_return()),
-        }
-
-    exit(json.dumps(output))
+    portfolio_info = portfolio.get_portfolio_info()
+    exit(simplejson.dumps(portfolio_info))
